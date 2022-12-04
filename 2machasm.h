@@ -50,7 +50,7 @@ struct src_instr
 struct src_label
 {
 	const char *name;
-	const struct src_instr *loc;
+	struct src_instr *loc;
 };
 
 enum token_type
@@ -123,14 +123,18 @@ read_char(FILE *f);
 
 #define LOAD_PROG_SRC_EALLOC 1 // internal alloc failed
 #define LOAD_PROG_SRC_EINVAL 2 // invalid syntax
-#define LOAD_PROG_SRC_ENOMEM 3 // no more program memory
-#define LOAD_PROG_SRC_ENOLAB 4 // no label declaration
-#define LOAD_PROG_SRC_EDPLAB 5 // duplicate label declaration
-#define LOAD_PROG_SRC_EUNCOM 6 // unknown command
-#define LOAD_PROG_SRC_EPSIZE 7 // param out of range
 int
 load_prog_src(FILE *f);
 
+#define BUILD_PROG_EALLOC 1 // internal alloc failed
+#define BUILD_PROG_EUNEND 2 // unexpected end of command/input
+#define BUILD_PROG_ENOMEM 3 // no more program memory
+#define BUILD_PROG_ENOLAB 4 // no label declaration
+#define BUILD_PROG_EDPLAB 5 // duplicate label declaration
+#define BUILD_PROG_EUNCOM 6 // unknown command
+#define BUILD_PROG_EPSIZE 7 // param out of range
+#define BUILD_PROG_EPTYPE 8 // param type is not int or ref
+#define BUILD_PROG_ENOCTX 9 // int, label out of context
 int
 build_prog(void);
 
@@ -141,6 +145,10 @@ read_token(const char *token, struct token_ctx *ctx);
 #define NEW_LABEL_EDPLAB 2
 int
 new_label(const char *name, const struct src_instr *instr);
+
+#define SET_LABEL_EALSET 1
+int
+set_label(const char *name, const struct src_instr *instr);
 
 struct src_label *
 ref_label(const char *name);
@@ -164,6 +172,9 @@ list_find(struct list *list, void *elem, int (*cmp_fn)(void *, void *));
 
 void *
 list_shift(struct list *list);
+
+void *
+list_start(struct list *list);
 
 void *
 list_get(struct list_node *node);

@@ -197,28 +197,64 @@ int
 build_prog(void)
 {
 	struct token_ctx *ctx
-	struct token_ctx *next_ctx;
 	while ((ctx = list_shift(token_list)) != NULL)
 	{
 		switch (ctx->type)
 		{
 			case INSTR_T:
-				next_ctx = list_shift(token_list);
-				if (next_ctx == NULL)
-					// TODO
-				new_instr();
-				break;
-			case INT_T:
-
-				break;
-			case LABEL_REF_T:
-				
+				build_instr(ctx)	
 				break;
 			case LABEL_DECL_T:
-
+				
 				break;
+			case INT_T:
+			case LABEL_REF_T:
+				return BUILD_PROG_ENOCTX;
 		}
 	}
+}
+
+int
+build_instr(struct token_ctx *ctx)
+{
+	struct token_ctx *next_ctx = list_shift(token_list);
+	if (next_ctx == NULL)
+		return BUILD_PROG_EUNEND;
+
+	struct src_label *label;
+
+	switch (next_ctx->type)
+	{
+		case INT_T:
+			NEW_INSTR_PARAM(ctx->qname, next_ctx->val);
+			break;
+		case LABEL_REF_T:
+			label = ref_label(next_ctx->qname);
+			if (label == NULL)
+			{
+				int stat = new_label(next_ctx->qname, NULL);
+				if (stat == NEW_LABEL_EALLOC)
+					return BUILD_PROG_EALLOC;
+				
+				label = ref_label(next_ctx->qname);
+			}
+			NEW_INSTR_LABEL(ctx->qname, label);
+			break;
+		case INSTR_T:
+		case LABEL_DECL_T:
+			return BUILD_PROG_EPTYPE;
+	}
+
+	return 0;
+}
+
+int
+build_label_decl(struct token_ctx *ctx)
+{
+	struct src_instr *assoc_instr;
+	// TODO how to get the next instr in 'build_prog' loop;
+	new_label(token_ctx->qname, assoc_instr);
+	return 0;
 }
 
 int
@@ -292,7 +328,7 @@ read_token(const char *token, struct token_ctx *ctx)
 int
 new_label(const char *name, const struct src_instr *loc)
 {
-	// if duplicate abort
+	// if label is set abort
 	if (ref_label(name) != NULL)
 		return NEW_LABEL_EDPLAB; 
 
@@ -306,7 +342,19 @@ new_label(const char *name, const struct src_instr *loc)
 	return list_add(label_list, label);
 }
 
-struct src_instr *
+int
+set_label(const char *name, const struct src_instr *loc)
+{
+	// prevent non-null override
+	if (label->loc != NULL)
+		return SET_LABEL_EISSET;	
+
+	label->loc = loc;
+	
+	return 0;
+}
+
+struct src_label *
 ref_label(const char *name)
 {
 	struct list *found = list_find(label_list, name, str_cmp);
@@ -378,6 +426,12 @@ list_shift(struct list *list)
 	}
 
 	return elem;
+}
+
+void *
+list_start(struct list *list)
+{
+	return list->start;
 }
 
 struct list_node *
