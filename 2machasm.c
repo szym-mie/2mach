@@ -3,9 +3,16 @@
 
 #include "2machasm.h"
 
-#define ABORT(E) \
+
+#define HELP(MSG) \
+	printf(MSG); \
+	exit(0)
+
+#define ABORT(MSG, __VA_ARGS__) \
+	printf(MSG, __VA_ARGS__); \
 	printf(FATAL_MSG); \
-	return E;
+	exit(1);
+
 
 static char *src_file = "";
 static char *out_file = "out";
@@ -14,13 +21,11 @@ static struct list *instr_list;
 static struct list *label_list; // TODO reimplement using hash map
 static struct list *token_list;
 
+
 int
 main(int argc, char *argv[])
 {
-	if (parse_args(argc, argv))
-	{
-		ABORT(2)
-	}
+	parse_args(argc, argv);
 
 	FILE *fsrc;
 	FILE *fout;
@@ -31,8 +36,7 @@ main(int argc, char *argv[])
 		fsrc = fopen(src_file, "r");
 		if (fsrc == NULL)
 		{
-			printf(NOT_FOUND_MSG, src_file);
-			ABORT(1)
+			ABORT(NOT_FOUND_MSG, src_file);
 		}
 	}
 	else
@@ -44,19 +48,17 @@ main(int argc, char *argv[])
 	fout = fopen(out_file, "w");
 	if (fout == NULL)
 	{
-		printf(NOT_FOUND_MSG, out_file);
-		ABORT(1)
+		ABORT(NOT_FOUND_MSG, out_file);
 	}
 
 	// init lists
-	instr_list = list_init();
-	label_list = list_init();
-	token_list = list_init();
+	instr_list = list();
+	label_list = list();
+	token_list = list();
 	
 	if (instr_list == NULL || label_list == NULL || token_list == NULL)
 	{
-		printf(LISTE_MSG);
-		ABORT(3)
+		ABORT(INIT_ERR_MSG);
 	}
 
 	// reading src
@@ -64,6 +66,7 @@ main(int argc, char *argv[])
 
 	return 0;
 }
+
 
 int
 parse_args(int argc, char *argv[])
@@ -77,19 +80,19 @@ parse_args(int argc, char *argv[])
 			case PARSE_ARG_EEMPTY:
 				return 0;
 			case PARSE_ARG_ENOVAL:
-				printf(NOVAL_MSG, argv[argi]);
-				return PARSE_ARGS_EFATAL;
+				ABORT(NOVAL_MSG, argv[argi]);
 			case PARSE_ARG_EINVAL:
-				printf(INVAL_MSG, argv[argi]);
+				ABORT(INVAL_MSG, argv[argi]);
 				return PARSE_ARGS_EFATAL;
 			case PARSE_ARG_EDHELP:
-				printf(DHELP_MSG);
+				HELP(DHELP_MSG);
 				return 0;
 		}
 	}
 
 	return 0;
 }
+
 
 int
 parse_arg(int argc, char *argv[], int *argi)
@@ -127,12 +130,14 @@ parse_arg(int argc, char *argv[], int *argi)
 	}
 }
 
+
 char
 read_char(FILE *f)
 {
 	int c = fgetc(f);
 	return c != EOF ? c : '\0';
 }
+
 
 /* syntax
  *
@@ -193,26 +198,48 @@ load_prog_src(FILE *f)
 	return 0;
 }
 
+
 int
 build_prog(void)
 {
-	struct token_ctx *ctx
+	struct list label_queue = list();
+	if (label_queue == NULL)
+		return BUILD_PROG_EALLOC;
+
+	struct token_ctx *ctx;
 	while ((ctx = list_shift(token_list)) != NULL)
 	{
 		switch (ctx->type)
 		{
 			case INSTR_T:
-				build_instr(ctx)	
+				int bi = build_instr(ctx);
+				if (bi)
+					return bi;
+
+				struct list_node *instr = list_end(instr_list);
+				if (instr == NULL)
+					return BUILD_PROG_UNEND;
+
+				int bl = build_label_decls(label_queue, instr);
+				if (bl)
+					return bl;
+
 				break;
 			case LABEL_DECL_T:
-				
+				int la = list_add(label_queue, ctx);
+				if (la == LIST_ADD_EALLOC)
+					return PROG_BUILD_EALLOC;
+
 				break;
 			case INT_T:
 			case LABEL_REF_T:
 				return BUILD_PROG_ENOCTX;
 		}
 	}
+
+	return 0;
 }
+
 
 int
 build_instr(struct token_ctx *ctx)
@@ -232,8 +259,8 @@ build_instr(struct token_ctx *ctx)
 			label = ref_label(next_ctx->qname);
 			if (label == NULL)
 			{
-				int stat = new_label(next_ctx->qname, NULL);
-				if (stat == NEW_LABEL_EALLOC)
+				int nl = new_label(next_ctx->qname, NULL);
+				if (nl == NEW_LABEL_EALLOC)
 					return BUILD_PROG_EALLOC;
 				
 				label = ref_label(next_ctx->qname);
@@ -248,14 +275,32 @@ build_instr(struct token_ctx *ctx)
 	return 0;
 }
 
+
 int
-build_label_decl(struct token_ctx *ctx)
+build_label_decls(struct list *queue, struct src_instr *instr)
 {
-	struct src_instr *assoc_instr;
-	// TODO how to get the next instr in 'build_prog' loop;
-	new_label(token_ctx->qname, assoc_instr);
+	struct token_ctx ctx;
+	while ((ctx = list_shift(queue)) != NULL)
+	{
+		struct src_label *fwd_label;
+		
+		switch (new_label(ctx->qname, instr))
+		{
+			case NEW_LABEL_EALLOC:
+				return BUILD_PROG_EALLOC;
+			case NEW_LABEL_EFWLAB:
+				fwd_label = ref_label(ctx->qname);
+				int assoc_stat = assoc_label(fwd_label, instr);
+				if (assoc_stat == ASSOC_LABEL_EISSET)
+					return BUILD_PROG_EDPLAB;
+				
+				break;
+		}
+	}
+
 	return 0;
 }
+
 
 int
 read_token(const char *token, struct token_ctx *ctx)
@@ -325,12 +370,13 @@ read_token(const char *token, struct token_ctx *ctx)
 	return 0;
 }
 
+
 int
 new_label(const char *name, const struct src_instr *loc)
 {
 	// if label is set abort
 	if (ref_label(name) != NULL)
-		return NEW_LABEL_EDPLAB; 
+		return NEW_LABEL_EFWLAB; 
 
 	struct src_label *label = malloc(sizeof(struct src_label));
 	if (label == NULL)
@@ -342,8 +388,9 @@ new_label(const char *name, const struct src_instr *loc)
 	return list_add(label_list, label);
 }
 
+
 int
-set_label(const char *name, const struct src_instr *loc)
+assoc_label(const char *name, const struct src_instr *loc)
 {
 	// prevent non-null override
 	if (label->loc != NULL)
@@ -354,6 +401,7 @@ set_label(const char *name, const struct src_instr *loc)
 	return 0;
 }
 
+
 struct src_label *
 ref_label(const char *name)
 {
@@ -363,6 +411,7 @@ ref_label(const char *name)
 	
 	return found->elem;
 }
+
 
 int
 new_instr(const char *name, unsigned int param, const struct src_label *label)
@@ -378,14 +427,19 @@ new_instr(const char *name, unsigned int param, const struct src_label *label)
 	return list_add(instr_list, instr);
 }
 
+
 struct list *
-list_init(void)
+list(void)
 {
 	struct list *list = malloc(sizeof(struct list));
+	if (list == NULL)
+		return NULL;
+
 	list->start = NULL;
 	
 	return list;
 }
+
 
 int
 list_add(struct list *list, void *elem)
@@ -397,20 +451,15 @@ list_add(struct list *list, void *elem)
 	node->next = NULL;
 	node->elem = elem;
 
-	if (list->start != NULL)
-	{
-		struct list_node *lptr = list->start;
-		while (lptr->next != NULL) 
-			lptr = lptr->next;
-		lptr->next = node;
-	}
+	struct list_node *end = list_end(list);
+	if (end != NULL)
+		end->next = node;
 	else
-	{
 		list->start = node;
-	}
 
 	return 0;
 }
+
 
 void *
 list_shift(struct list *list)
@@ -428,11 +477,28 @@ list_shift(struct list *list)
 	return elem;
 }
 
-void *
-list_start(struct list *list)
+
+struct list_node *
+list_end(struct list *list)
 {
-	return list->start;
+	if (list->start != NULL)
+	{
+		struct list_node *lptr = list->start;
+		while (lptr->next != NULL) 
+			lptr = lptr->next;
+		return lptr;
+	}
+
+	return NULL;
 }
+
+
+void *
+list_get(struct list_node *node)
+{
+	return node->elem;
+}
+
 
 struct list_node *
 list_find(struct list *list, void *elem, int (*cmp_fn)(void *, void *))
@@ -448,33 +514,40 @@ list_find(struct list *list, void *elem, int (*cmp_fn)(void *, void *))
 	return NULL;
 }
 
-void *
-list_get(struct list_node *node)
-{
-	return node->elem;
-}
 
 void
-list_free(struct list *list)
+list_clear(struct list *list)
 {
 	struct list_node *node = list->start;
 	while (node != NULL)
 	{
 		struct list_node *next = node->next;
-		free(node->elem);
 		free(node);
 		node = next;
 	}
 }
 
+
+void
+list_free(struct list *list)
+{
+	list_clear(list, 0);
+	free(list);
+}
+
+
 struct tree *
-tree_init(void)
+tree(void)
 {
 	struct tree *tree = malloc(sizeof(struct tree));
+	if (tree == NULL)
+		return NULL;
+
 	tree->root = NULL;
 
 	return tree;
 }
+
 
 int
 tree_add(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
@@ -509,6 +582,7 @@ tree_add(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
 	return 0;
 }
 
+
 struct tree_node *
 tree_find(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
 {
@@ -524,8 +598,9 @@ tree_find(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
 	return tptr;
 }
 
+
 struct hash_map *
-hash_map_init(
+hash_map(
 	unsigned int size, 
 	unsigned long (*hash_fn)(void *), 
 	int (*cmp_fn)(void *, void *))
@@ -540,7 +615,7 @@ hash_map_init(
 
 	for (unsigned int i = 0; i < size; i++)
 	{
-		struct list *list = list_init();
+		struct list *list = list();
 		if (list == NULL)
 			return NULL;
 
@@ -553,6 +628,7 @@ hash_map_init(
 
 	return map;
 }
+
 
 struct list_node *
 hash_map_find(struct hash_map *map, void *elem)
@@ -576,6 +652,7 @@ str_cmp(const char *str1, const char *str2)
 	return *str1 - *str2 > 0 ? 1 : -1;
 }
 
+
 unsigned int
 str_len(const char *str, unsigned int max_size)
 {
@@ -588,6 +665,7 @@ str_len(const char *str, unsigned int max_size)
 
 	return count;
 }
+
 
 char *
 str_cpy(const char *str, unsigned int max_size)
@@ -604,6 +682,7 @@ str_cpy(const char *str, unsigned int max_size)
 
 	return new_str;
 }
+
 
 unsigned long
 str_hash(const char *str)

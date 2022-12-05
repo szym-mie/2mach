@@ -1,6 +1,8 @@
 #ifndef _2MACH_DEF_H_
 #define _2MACH_DEF_H_
 
+
+// common config for machine and assembler
 #define MEM_BITS 8
 #define MEM_SIZE 256
 

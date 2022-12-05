@@ -3,6 +3,11 @@
 
 #include "2mach.def.h"
 
+
+// assembler config
+// hard limits
+#define TOKEN_SIZE 64
+
 // ANSI escape codes
 #define ANSI_CSI(N) "\x1b[" #N "m"
 
@@ -25,16 +30,15 @@
 #define NOVAL_MSG \
 	"flag: " BOLD("%s") " requires value\n"
 
-#define LISTE_MSG \
-	"could not initialize lists\n"
+#define INIT_ERR_MSG \
+	"could not init - mem alloc failed\n"
+
+#define NOT_FOUND_MSG \
+	"could not open \'%s\' file\n"
 
 #define FATAL_MSG \
 	BOLD("fatal error") ": aborting\n"
 
-#define NOT_FOUND_MSG \
-	"could not open \'%s\' file\n"
-// conf
-#define TOKEN_SIZE 64
 
 // data structures
 struct src_instr;
@@ -139,16 +143,22 @@ int
 build_prog(void);
 
 int
+build_instr(struct token_ctx ctx);
+
+int
+build_label_decls(struct list *queue, struct instr *assoc_instr);
+
+int
 read_token(const char *token, struct token_ctx *ctx);
 
 #define NEW_LABEL_EALLOC 1
-#define NEW_LABEL_EDPLAB 2
+#define NEW_LABEL_EFWLAB 2
 int
 new_label(const char *name, const struct src_instr *instr);
 
-#define SET_LABEL_EALSET 1
+#define ASSOC_LABEL_EALSET 1
 int
-set_label(const char *name, const struct src_instr *instr);
+assoc_label(const char *name, const struct src_instr *instr);
 
 struct src_label *
 ref_label(const char *name);
@@ -161,29 +171,32 @@ new_instr(const char *name, unsigned int param, struct src_label *label);
 #define NEW_INSTR_LABEL(NAME, LABEL) new_instr(NAME, 0, LABEL)
 
 struct list *
-list_init(void);
+list(void);
 
 #define LIST_ADD_EALLOC 1
 int
 list_add(struct list *list, void *elem);
 
-struct list_node *
-list_find(struct list *list, void *elem, int (*cmp_fn)(void *, void *));
-
 void *
 list_shift(struct list *list);
 
 void *
-list_start(struct list *list);
+list_end(struct list *list);
 
 void *
 list_get(struct list_node *node);
+
+struct list_node *
+list_find(struct list *list, void *elem, int (*cmp_fn)(void *, void *));
+
+void
+list_clear(struct list *list);
 
 void
 list_free(struct list *list);
 
 struct tree *
-tree_init(void);
+tree(void);
 
 #define TREE_ADD_EALLOC 1
 int
@@ -193,7 +206,7 @@ struct tree_node *
 tree_find(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
 
 struct hash_map *
-hash_map_init(
+hash_map(
 	unsigned int size, 
 	unsigned long (*hash_fn)(void *), 
 	int (*cmp_fn)(void *, void *));
