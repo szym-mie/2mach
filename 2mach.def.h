@@ -3,18 +3,15 @@
 
 
 // common config for machine and assembler
-#define MEM_BITS 8
-#define MEM_SIZE 256
+#define MEM_ADDR_BITS 31
+#define INSTR_SIZE 32
 
-#define PROG_BITS 15
-#define PROG_SIZE 32768
+typedef unsigned int cell_t;
+typedef unsigned int prog_param_t;
+typedef unsigned int offset_t;
 
-typedef unsigned char cell_t;
-typedef unsigned short prog_param_t;
-typedef unsigned short offset_t;
-
-#define PROG_IINSTR_BITS 1
-#define PROG_IPARAM_BITS 15 
+#define PROG_IINSTR_BITS (INSTR_SIZE - MEM_ADDR_BITS)
+#define PROG_IPARAM_BITS MEM_ADDR_BITS 
 
 enum prog_instr
 {

@@ -27,3 +27,43 @@ write_mem(offset_t offset, cell_t cell)
 {
 	*read_mem(offset) = cell;
 }
+
+progdata_t *
+read_prog(offset_t offset)
+{
+	return prog + (offset & PROG_BITS);
+}
+
+int
+load_prog_stdin(void)
+{
+	offset_t ic = 0;
+
+	char line_buf[256] = { 0 };
+	
+	int c = 0;
+	while ((c = getchar()) != EOF)
+	{
+		if (
+	}
+
+	return 0;
+}
+
+int
+read_line_stdin(char *buf, int max_size)
+{
+	int size = 0;
+	int c = 0;
+
+	while ((c = getchar()) != EOF)
+	{
+		if (c == '\n')
+			*(buf++) = 	
+
+		if (++size >= max_size)
+			return max_size;
+	}
+	
+	return size;
+}

@@ -3,5 +3,7 @@ TARGETS=2mach 2machasm
 
 for target in $TARGETS
 do
-	$CC -o $target $target.c
+	echo -e Building $target :\n
+	$CC -o $target.out $target.c
+	echo ---
 done

@@ -1,8 +1,12 @@
 @echo off
 
-set CC=gcc
+set CC=tcc
 set TARGETS=2mach 2machasm
 
-for %%T in (%TARGETS%) do 
-	%CC% -o %%T %%T.c
+for %%T in (%TARGETS%) do (
+	echo Building %%T :
+	echo.
+	%CC% -o %%T.exe %%T.c
+	echo ---
+)
 

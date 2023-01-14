@@ -8,8 +8,8 @@
 	printf(MSG); \
 	exit(0)
 
-#define ABORT(MSG, __VA_ARGS__) \
-	printf(MSG, __VA_ARGS__); \
+#define ABORT(MSG, PARAMS...) \
+	printf(MSG, ## PARAMS); \
 	printf(FATAL_MSG); \
 	exit(1);
 
@@ -62,7 +62,29 @@ main(int argc, char *argv[])
 	}
 
 	// reading src
-	
+	switch (load_prog_src(fsrc))
+	{
+		case LOAD_PROG_SRC_EALLOC:
+			ABORT(ALLOC_ERR_MSG)
+		case LOAD_PROG_SRC_EINVAL:
+			ABORT(LP_INVAL_MSG)
+	}
+
+	switch (build_prog())
+	{
+		case BUILD_PROG_EALLOC:
+			ABORT(ALLOC_ERR_MSG)
+		case BUILD_PROG_EUNEND:
+			ABORT(BP_UNEND_MSG)
+		case BUILD_PROG_EDPLAB:
+			ABORT(BP_DPLAB_MSG)
+		case BUILD_PROG_EUNCOM:
+			ABORT(BP_UNCOM_MSG)
+		case BUILD_PROG_EPTYPE:
+			ABORT(BP_PTYPE_MSG)
+		case BUILD_PROG_ENOCTX:
+			ABORT(BP_NOCTX_MSG)
+	}
 
 	return 0;
 }
@@ -152,7 +174,7 @@ read_char(FILE *f)
  * label declaration
  * 	<label> <instr?>
  * 	start: add 0x01 -- declare 'start' for this instruction
- * 	start: \n -- just label use next instruction
+ * 	start: \n -- just label, assoc with next instruction
  *
  */
 int
@@ -170,7 +192,7 @@ load_prog_src(FILE *f)
 
 		if (c == ' ' || c == '\n' || c == '\0')
 		{
-			if (ti == 0) 
+			if (i == 0) 
 				continue;
 
 			token_buf[i] = '\0';
@@ -202,33 +224,39 @@ load_prog_src(FILE *f)
 int
 build_prog(void)
 {
-	struct list label_queue = list();
+	struct list *label_queue = list();
 	if (label_queue == NULL)
 		return BUILD_PROG_EALLOC;
 
 	struct token_ctx *ctx;
 	while ((ctx = list_shift(token_list)) != NULL)
 	{
+		int bi; // build_instr status
+		int bl; // build_label status
+		struct list_node *instr;
+
+		int la; // label add status
+
 		switch (ctx->type)
 		{
 			case INSTR_T:
-				int bi = build_instr(ctx);
+				bi = build_instr(ctx);
 				if (bi)
 					return bi;
 
-				struct list_node *instr = list_end(instr_list);
+				instr = list_end(instr_list);
 				if (instr == NULL)
-					return BUILD_PROG_UNEND;
+					return BUILD_PROG_EUNEND;
 
-				int bl = build_label_decls(label_queue, instr);
+				bl = build_label_decls(label_queue, instr);
 				if (bl)
 					return bl;
 
 				break;
 			case LABEL_DECL_T:
-				int la = list_add(label_queue, ctx);
+				la = list_add(label_queue, ctx);
 				if (la == LIST_ADD_EALLOC)
-					return PROG_BUILD_EALLOC;
+					return BUILD_PROG_EALLOC;
 
 				break;
 			case INT_T:
@@ -279,7 +307,7 @@ build_instr(struct token_ctx *ctx)
 int
 build_label_decls(struct list *queue, struct src_instr *instr)
 {
-	struct token_ctx ctx;
+	struct token_ctx *ctx;
 	while ((ctx = list_shift(queue)) != NULL)
 	{
 		struct src_label *fwd_label;
@@ -291,7 +319,7 @@ build_label_decls(struct list *queue, struct src_instr *instr)
 			case NEW_LABEL_EFWLAB:
 				fwd_label = ref_label(ctx->qname);
 				int assoc_stat = assoc_label(fwd_label, instr);
-				if (assoc_stat == ASSOC_LABEL_EISSET)
+				if (assoc_stat == ASSOC_LABEL_EFIXED)
 					return BUILD_PROG_EDPLAB;
 				
 				break;
@@ -305,21 +333,20 @@ build_label_decls(struct list *queue, struct src_instr *instr)
 int
 read_token(const char *token, struct token_ctx *ctx)
 {
-	char *str = token;
-	int is_num = IS_NUM_START(*str);
+	int is_num = IS_NUM_START(*token);
 
 	if (is_num)
 	{
-		token_ctx->type = INT_T;
-		token_ctx->val = 0;	
-		token_ctx->qname = NULL;
+		ctx->type = INT_T;
+		ctx->val = 0;	
+		ctx->qname = NULL;
 
 		int stat = 0;
 
-		while (*str == '0')
-			*str++;
+		while (*token == '0')
+			*token++;
 
-		switch (*str)
+		switch (*token)
 		{
 			case 'b':
 			case 'B':
@@ -327,10 +354,10 @@ read_token(const char *token, struct token_ctx *ctx)
 				break;
 			case 'x':
 			case 'X':
-				stat = sscanf(token, "%x", &token_ctx->val);
+				// no support for hex currently
 				break;
 			default:
-				stat = sscanf(token, "%d", &token_ctx->val);
+				// do decimal conv
 				break;
 		}
 
@@ -340,19 +367,19 @@ read_token(const char *token, struct token_ctx *ctx)
 	else
 	{
 		// assume it's an instruction
-		token_ctx->type = INSTR_T;
+		ctx->type = INSTR_T;
 
-		if (*str == ':')
-			token_ctx->type = LABEL_REF_T;
+		if (*token == ':')
+			ctx->type = LABEL_REF_T;
 		
-		char qname = malloc(str_len(token, TOKEN_SIZE) + 1);
+		char *qname = malloc(str_len(token, TOKEN_SIZE) + 1);
 		char c;
-		while ((c = *str++) != '\0')
+		while ((c = *token++) != '\0')
 		{	
 			if (c == ':')
 			{
-				if (*str == '\0')
-					token_ctx->type = LABEL_DECL_T;
+				if (*token == '\0')
+					ctx->type = LABEL_DECL_T;
 				else
 					return LOAD_PROG_SRC_EINVAL;
 			}
@@ -364,7 +391,7 @@ read_token(const char *token, struct token_ctx *ctx)
 
 		*qname = '\0';
 
-		token_ctx->qname = qname;
+		ctx->qname = qname;
 	}
 
 	return 0;
@@ -372,7 +399,7 @@ read_token(const char *token, struct token_ctx *ctx)
 
 
 int
-new_label(const char *name, const struct src_instr *loc)
+new_label(const char *name, struct src_instr *loc)
 {
 	// if label is set abort
 	if (ref_label(name) != NULL)
@@ -390,11 +417,11 @@ new_label(const char *name, const struct src_instr *loc)
 
 
 int
-assoc_label(const char *name, const struct src_instr *loc)
+assoc_label(struct src_label *label, struct src_instr *loc)
 {
 	// prevent non-null override
 	if (label->loc != NULL)
-		return SET_LABEL_EISSET;	
+		return ASSOC_LABEL_EFIXED;	
 
 	label->loc = loc;
 	
@@ -405,7 +432,7 @@ assoc_label(const char *name, const struct src_instr *loc)
 struct src_label *
 ref_label(const char *name)
 {
-	struct list *found = list_find(label_list, name, str_cmp);
+	struct list_node *found = list_find(label_list, name, str_cmp);
 	if (found == NULL)
 		return NULL;
 	
@@ -503,10 +530,10 @@ list_get(struct list_node *node)
 struct list_node *
 list_find(struct list *list, void *elem, int (*cmp_fn)(void *, void *))
 {
-	struct list *lptr = list->start;
+	struct list_node *lptr = list->start;
 	while (lptr != NULL)
 	{
-		if (test(elem, lptr->elem)) 
+		if (cmp_fn(elem, lptr->elem)) 
 			return lptr;
 		lptr = lptr->next;
 	}
@@ -531,7 +558,7 @@ list_clear(struct list *list)
 void
 list_free(struct list *list)
 {
-	list_clear(list, 0);
+	list_clear(list);
 	free(list);
 }
 
@@ -564,7 +591,7 @@ tree_add(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
 	{
 		int tr;
 		struct tree_node *tptr = tree->root;
-		while ((tr = test(elem, tptr->elem)) != 0)
+		while ((tr = cmp_fn(elem, tptr->elem)) != 0)
 		{
 			tptr = tr < 0 ? tptr->left : tptr->right;
 			if (tptr == NULL)
@@ -588,7 +615,7 @@ tree_find(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
 {
 	int tr;
 	struct tree_node *tptr = tree->root;
-	while ((tr = test(elem, tptr->elem)) != 0)
+	while ((tr = cmp_fn(elem, tptr->elem)) != 0)
 	{
 		tptr = tr < 0 ? tptr->left : tptr->right;
 		if (tptr == NULL) 
@@ -615,11 +642,11 @@ hash_map(
 
 	for (unsigned int i = 0; i < size; i++)
 	{
-		struct list *list = list();
-		if (list == NULL)
+		struct list *val_list = list();
+		if (val_list == NULL)
 			return NULL;
 
-		*(map->lists+i) = list;
+		*(map->lists+i) = val_list;
 	}
 
 	map->size = size;
@@ -633,10 +660,10 @@ hash_map(
 struct list_node *
 hash_map_find(struct hash_map *map, void *elem)
 {
-	unsigned int ndx = map->hash(elem) % map->size;
+	unsigned int ndx = map->hash_fn(elem) % map->size;
 	struct list *list = map->lists[ndx];
 
-	return list_find(list, elem, map->cmp);
+	return list_find(list, elem, map->cmp_fn);
 }
 
 

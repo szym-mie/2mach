@@ -3,12 +3,6 @@
 
 #include "2mach.def.h"
 
-struct progdata
-{
-	enum prog_instr instr : PROG_IINSTR_BITS;
-	prog_param_t param : PROG_IPARAM_BITS;
-}; 
-
 cell_t *
 read_mem(offset_t offset);
 

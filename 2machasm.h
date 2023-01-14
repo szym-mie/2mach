@@ -33,11 +33,39 @@
 #define INIT_ERR_MSG \
 	"could not init - mem alloc failed\n"
 
+#define ALLOC_ERR_MSG \
+	"mem alloc failed\n"
+
 #define NOT_FOUND_MSG \
 	"could not open \'%s\' file\n"
 
 #define FATAL_MSG \
 	BOLD("fatal error") ": aborting\n"
+
+
+// load prog error msgs
+#define LP_INVAL_MSG \
+	"invalid syntax"
+
+
+// build prog error msgs
+#define BP_UNEND_MSG \
+	"incomplete instruction"
+
+#define BP_NOLAB_MSG \
+	"no label found: '%s'"
+
+#define BP_DPLAB_MSG \
+	"duplicate label declaration: '%s'"
+
+#define BP_UNCOM_MSG \
+	"unknown command: '%s'"
+
+#define BP_PTYPE_MSG \
+	"instruction param not int/label: '%s'"
+
+#define BP_NOCTX_MSG \
+	"int/label outside of instruction param: '%s'"
 
 
 // data structures
@@ -132,21 +160,21 @@ load_prog_src(FILE *f);
 
 #define BUILD_PROG_EALLOC 1 // internal alloc failed
 #define BUILD_PROG_EUNEND 2 // unexpected end of command/input
-#define BUILD_PROG_ENOMEM 3 // no more program memory
-#define BUILD_PROG_ENOLAB 4 // no label declaration
-#define BUILD_PROG_EDPLAB 5 // duplicate label declaration
-#define BUILD_PROG_EUNCOM 6 // unknown command
-#define BUILD_PROG_EPSIZE 7 // param out of range
-#define BUILD_PROG_EPTYPE 8 // param type is not int or ref
-#define BUILD_PROG_ENOCTX 9 // int, label out of context
+// TODO move to out #define BUILD_PROG_ENOMEM 3 // no more program memory
+// TODO move to out #define BUILD_PROG_ENOLAB 4 // no label declaration
+#define BUILD_PROG_EDPLAB 3 // duplicate label declaration
+#define BUILD_PROG_EUNCOM 4 // unknown command
+// TODO move to out #define BUILD_PROG_EPSIZE 7 // param out of range
+#define BUILD_PROG_EPTYPE 5 // param type is not int or ref
+#define BUILD_PROG_ENOCTX 6 // int, label out of context
 int
 build_prog(void);
 
 int
-build_instr(struct token_ctx ctx);
+build_instr(struct token_ctx *ctx);
 
 int
-build_label_decls(struct list *queue, struct instr *assoc_instr);
+build_label_decls(struct list *queue, struct src_instr *instr);
 
 int
 read_token(const char *token, struct token_ctx *ctx);
@@ -154,18 +182,18 @@ read_token(const char *token, struct token_ctx *ctx);
 #define NEW_LABEL_EALLOC 1
 #define NEW_LABEL_EFWLAB 2
 int
-new_label(const char *name, const struct src_instr *instr);
+new_label(const char *name, struct src_instr *instr);
 
-#define ASSOC_LABEL_EALSET 1
+#define ASSOC_LABEL_EFIXED 1
 int
-assoc_label(const char *name, const struct src_instr *instr);
+assoc_label(struct src_label *label, struct src_instr *instr);
 
 struct src_label *
 ref_label(const char *name);
 
 #define NEW_INSTR_EALLOC 1
 int
-new_instr(const char *name, unsigned int param, struct src_label *label);
+new_instr(const char *name, unsigned int param, const struct src_label *label);
 
 #define NEW_INSTR_PARAM(NAME, PARAM) new_instr(NAME, PARAM, NULL)
 #define NEW_INSTR_LABEL(NAME, LABEL) new_instr(NAME, 0, LABEL)
@@ -180,7 +208,7 @@ list_add(struct list *list, void *elem);
 void *
 list_shift(struct list *list);
 
-void *
+struct list_node *
 list_end(struct list *list);
 
 void *
@@ -203,7 +231,7 @@ int
 tree_add(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *));
 
 struct tree_node *
-tree_find(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *))
+tree_find(struct tree *tree, void *elem, int (*cmp_fn)(void *, void *));
 
 struct hash_map *
 hash_map(
@@ -217,8 +245,11 @@ hash_map_find(struct hash_map *map, void *elem);
 int
 str_cmp(const char *str1, const char *str2);
 
+unsigned int
+str_len(const char *str, unsigned int max_size);
+
 char *
-str_cpy(const char *str);
+str_cpy(const char *str, unsigned int max_size);
 
 unsigned long
 str_hash(const char *str);
